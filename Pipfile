@@ -4,16 +4,19 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-jupyter = "*"
 numpy = "*"
+jupyter = "*"
 matplotlib = "*"
-zarr = "*"
 scikit-image = "*"
 napari = "*"
 pillow = "*"
+utils = "*"
+cellpose = {extras = ["gui"], version = "*"}
+tifffile = "*"
 opencv-python = "*"
+scikit-learn = "*"
 
 [dev-packages]
 
 [requires]
-python_version = "3.8"
+python_version = "3.10"
