@@ -18,14 +18,14 @@ class ToTensor(object):
 
 
 class CustomDataset(Dataset):
-    def __init__(self, data_root, mode="train", label_key="volumes/gt_fgbg", padding_size=None,
+    def __init__(self, data_root, mode="train", padding_size=None,
                  net_input_size=None):
-        self.label_key = label_key
-        self.samples = glob.glob(os.path.join(data_root, "*.zarr"))
+        self.samples = glob.glob(data_root)
+        self.label_dict = self.get_data_dict("label")
+        self.raw_dict = self.get_data_dict("raw")
         self.mode = mode
         self.padding_size = padding_size
         self.net_input_size = net_input_size
-
         self.define_augmentation()
 
     def __len__(self):
@@ -70,10 +70,16 @@ class CustomDataset(Dataset):
         self.to_tensor = ToTensor()
 
     def load_sample(self, filename):
-        fl = zarr.open(filename, 'r')
-        raw = np.array(fl['volumes/raw'])
-        labels = np.array(fl[self.label_key]).astype(np.int16)
+        raw = self.raw_dict[filename]
+        labels = np.array(self.label_dict[filename]).astype(np.int16)
         return raw, labels
+
+    def get_data_dict(self, data_type):
+        data_dict = {}
+        print(self.samples)
+        for sample in data_type + "/" + self.samples:
+            data_dict[sample] = np.load(sample)
+        return data_dict
 
     def pad_sample(self, raw, labels):
         if self.pad is not None:
@@ -105,3 +111,14 @@ class CustomDataset(Dataset):
         raw = raw.copy()
 
         return raw, labels
+
+
+def main():
+    data_root = "data/cell/"
+    dataset = CustomDataset(data_root, "test")
+    test_dataloader = DataLoader(dataset)
+    image = iter(test_dataloader)
+    print(image)
+
+
+main()
