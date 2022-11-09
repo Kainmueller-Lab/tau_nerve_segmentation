@@ -15,6 +15,9 @@ cellpose = {extras = ["gui"], version = "*"}
 tifffile = "*"
 opencv-python = "*"
 scikit-learn = "*"
+torch = "*"
+imageio = "*"
+imgaug = "*"
 
 [dev-packages]
 
