@@ -168,44 +168,33 @@ def instance_seg_train_step(model, raw, gt, fast_aug, color_aug_fn, inst_loss_fn
     gt = gt.to(device).float()
     # B = batch
     B, _, _, _ = raw.shape
-    if inst_model == 'cpv_3c':
-        gt_3c_list = []
     print("step started")
     # augment
     raw_list = []
     gt_inst_list = []
     for b in range(B):
         img = raw[b].permute(2, 0, 1).unsqueeze(0)  # BHWC -> BCHW
-        gt_ = gt[b].permute(2, 0, 1).unsqueeze(0)  # BHW2 -> B2HW
+        gt_ = gt#[b]#.permute(2, 0, 1).unsqueeze(0)  # BHW2 -> B2HW
         img_saug, gt_saug = fast_aug.forward_transform(img, gt_)
-        print("finished aug")
+
         # gt_inst = fix_mirror_padding(gt_saug[0,0].cpu().detach().numpy().astype(np.int32)) # slow af
         # gt_inst = torch.tensor(gt_inst, device=device).float().unsqueeze(0)
-        gt_inst = gt_saug[:, 0]
-        if inst_model == 'cpv_3c':
-            gt_3c = gt_saug[:, 2]
-            gt_3c_list.append(gt_3c)
+        gt_inst = gt_saug#[:, 0]
         img_caug = color_aug_fn(img_saug)
         raw_list.append(img_caug)
         gt_inst_list.append(gt_inst)
     img_caug = torch.cat(raw_list, axis=0)
     gt_inst = torch.cat(gt_inst_list, axis=0)
-    print(img_caug)
-    print(gt_inst)
-    print(gt_inst.shape)
+    print("finished aug")
     out_fast = model(img_caug)
-    print("model out: %s" % str(out_fast))
-    print(out_fast.shape)
     _, _, H, W = out_fast.shape
     # loss input: gt_inst = ground truth, pred_inst = model output
-    gt_inst = data_utils.center_crop(gt_inst.unsqueeze(0), H, W)
+    #inp = gt_inst.unsqueeze(0)
+    gt_inst = data_utils.center_crop(gt_inst, H, W) #BCHW
     pred_inst = out_fast #BHW
-    if inst_model == 'cpv_3c':
-        gt_3c = torch.cat(gt_3c_list, axis=0)
-        gt_3c = data_utils.center_crop(gt_3c.unsqueeze(0), H, W)
-        instance_loss = inst_loss_fn(pred_inst, gt_inst, gt_3c)
-    else:
-        instance_loss = inst_loss_fn(pred_inst, gt_inst.squeeze(0).float(), (gt_inst.squeeze(0) > 0).float())
+    # pred_inst = (1, 2, 1200, 1312)
+    # gt_inst.squeeze(0).float() = (2, 1200, 1312)
+    instance_loss = inst_loss_fn(pred_inst, gt_inst.squeeze(0).float(), (gt_inst.squeeze(0) > 0).float())
     writer.add_scalar('instance_loss', instance_loss, step)
     print('loss', instance_loss.item())
     return instance_loss, pred_inst, img_caug, gt_inst

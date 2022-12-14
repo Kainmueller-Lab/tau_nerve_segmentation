@@ -247,8 +247,12 @@ def mean(l, ignore_nan=False, empty=0):
 """
 Author: Davy Neven
 Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
+Paper: https://arxiv.org/pdf/1906.11109.pdf
 """
+# labels and instances => instances is m
 # (n_sigma=2, to_center=params['to_center'], foreground_weight=10, H=1197, W=1299)
+# input: (pred_inst, gt_inst.squeeze(0).float(), (gt_inst.squeeze(0) > 0).float())
+
 
 class SpatialEmbLoss(nn.Module):
 

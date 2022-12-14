@@ -142,7 +142,7 @@ def normalize_min_max(x, mi, ma, clip=False, eps=1e-20, dtype=np.float32):
     return x
 
 
-def pad_up_to(array, crop_size, mode='constant'):
+def pad_up_to(array, crop_size, mode='constant', labels = False):
     """
     :param array: numpy array
     :param xx: desired height
@@ -150,7 +150,11 @@ def pad_up_to(array, crop_size, mode='constant'):
     :return: padded array
     """
     xx, yy = crop_size
-    c, h, w = array.shape
+    if labels:
+        c, h, w = array.shape
+    else:
+        h = array.shape[0]
+        w = array.shape[1]
 
     t = (xx - h) // 2
     b = xx - t - h
@@ -158,7 +162,11 @@ def pad_up_to(array, crop_size, mode='constant'):
     l = (yy - w) // 2
     r = yy - l - w
     t, b, l, r = [np.abs(i) for i in [t, b, l, r]]
-    return np.pad(array, pad_width=((0, 0), (t, b), (l, r)), mode=mode)
+    if labels:
+        pad_width = ((0, 0), (t, b), (l, r))
+    else:
+        pad_width = ((t, b), (l, r), (0, 0))
+    return np.pad(array, pad_width=pad_width, mode=mode)
 
 
 def make_random_slice(img_shape, crop_size):
@@ -234,7 +242,7 @@ class CropDataset(Dataset):
                     if labels[i].shape[-2] < self.crop_size[0] or labels[i].shape[-1] < self.crop_size[1]:
                         labels[i] = pad_up_to(labels[i], self.crop_size)
         if labels:
-            return *raws, labels
+            return *raws, *labels
         else:
             return *raws, False
 
@@ -258,20 +266,20 @@ class H5pyDataset(Dataset):
     def __getitem__(self, idx):
         with self.reader(self.file_paths[idx]) as f:
             raws = [np.array(f[key]) for key in self.raw_keys]
-            labels = [np.array([f[key]]) for key in self.label_keys]
-        raws = [normalize_percentile(raw.astype(np.float32)) for raw in raws]
-        if self.crop_size:
-            for i in range(len(raws)):
-               # if raws[i].shape[-2] < self.crop_size[0] or raws[i].shape[-1] < self.crop_size[1]:
-                raws[i] = pad_up_to(raws[i], self.crop_size)
+            labels = [np.array([f[key] for key in self.label_keys])]
+            raws = [normalize_percentile(raw.astype(np.float32)) for raw in raws]
+            if self.crop_size:
+                for i in range(len(raws)):
+                    if raws[i].shape[-2] < self.crop_size[0] or raws[i].shape[-1] < self.crop_size[1]:
+                        raws[i] = pad_up_to(raws[i], self.crop_size)
+                if labels:
+                    for i in range(len(labels)):
+                        if labels[i].shape[-2] < self.crop_size[0] or labels[i].shape[-1] < self.crop_size[1]:
+                            labels[i] = pad_up_to(labels[i], self.crop_size, labels=True)
             if labels:
-                for i in range(len(labels)):
-                   # if labels[i].shape[-2] < self.crop_size[0] or labels[i].shape[-1] < self.crop_size[1]:
-                    labels[i] = pad_up_to(labels[i], self.crop_size)
-        if labels:
-            return *raws, *labels
-        else:
-            return *raws, False
+                return *raws, *labels
+            else:
+                return *raws, False
 
 
 def shuffle_train_data(X_train, Y_train, random_seed):
@@ -440,7 +448,7 @@ def create_dataset(path, target_path):
     file_names = glob.glob(os.path.join(path, "raw/*.npy"))
     for file in file_names:
         file_name = get_file_name(file)
-        file_name = file_name[0:len(file_name)-4]
+        file_name = file_name[0:len(file_name) - 4]
         with h5py.File(os.path.join(target_path, '%s.hdf5' % file_name), 'w') as f:
             raw = np.load(os.path.join(path, "raw/%s.npy" % file_name))
             label_instance = np.asarray(io.imread(os.path.join(path, "label/%s.png" % file_name)), dtype=np.uint16)
