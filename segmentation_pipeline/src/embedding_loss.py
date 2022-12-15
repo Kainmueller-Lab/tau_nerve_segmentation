@@ -276,6 +276,10 @@ class SpatialEmbLoss(nn.Module):
         self.register_buffer("xym", xym)
 
     def forward(self, prediction, instances, labels, w_inst=1., w_var=10., w_seed=1, iou=False, iou_meter=None):
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(12, 9))
+        fig.add_subplot(1, 1, 1)
+        plt.imshow(prediction.cpu().detach().numpy()[0][0])
 
         batch_size, height, width = prediction.size(0), prediction.size(2), prediction.size(3)
 
@@ -286,9 +290,9 @@ class SpatialEmbLoss(nn.Module):
 
             # spatial_emb = torch.tanh(prediction[b, 0:2]) + xym_s  # 2 x h x w
             spatial_emb = prediction[b, 0:2] + xym_s  # 2 x h x w
-            sigma = prediction[b, 2:2 + self.n_sigma]  # n_sigma x h x w
+            sigma = prediction[b, 0:2 + self.n_sigma]  # n_sigma x h x w
             seed_map = torch.sigmoid(
-                prediction[b, 2 + self.n_sigma:2 + self.n_sigma + 1])  # 1 x h x w
+                prediction[b, 0:self.n_sigma])  # 1 x h x w
 
             # loss accumulators
             var_loss = 0

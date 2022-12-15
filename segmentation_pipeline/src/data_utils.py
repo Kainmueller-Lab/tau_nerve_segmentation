@@ -5,9 +5,9 @@ import h5py
 import zarr
 import glob
 from skimage import io
+from skimage.segmentation import find_boundaries
 from torch.utils.data import Dataset
 from torchvision.transforms.transforms import RandomApply, GaussianBlur, ColorJitter
-from skimage.segmentation import find_boundaries
 from scipy.ndimage.morphology import generate_binary_structure
 from scipy.ndimage import binary_erosion
 from tqdm.auto import tqdm

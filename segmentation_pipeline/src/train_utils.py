@@ -11,6 +11,7 @@ from src import stain_mix #import stain_mix.torch_stain_mixup
 
 
 def save_model(step, model, optimizer, loss, filename):
+    print("Save model")
     torch.save({
         'step': step,
         'model_state_dict': model.state_dict(),
@@ -202,14 +203,13 @@ def instance_seg_train_step(model, raw, gt, fast_aug, color_aug_fn, inst_loss_fn
 
 def instance_seg_validation(model, validation_dataloader, inst_lossfn, device, step, writer, inst_model='cpv_3c'):
     val_loss = []
-    val_inst_loss = []
     for raw, gt in validation_dataloader:
         raw = raw.to(device)
         raw = raw.float() + raw.min() * -1
         raw /= raw.max()
         gt = gt.to(device)
         raw = raw.permute(0, 3, 1, 2)  # BHWC -> BCHW
-        gt = gt.permute(0, 3, 1, 2)  # BHW2 -> B2HW
+        gt = gt#.permute(0, 3, 1, 2)  # BHW2 -> B2HW
         with torch.no_grad():
             out = model(raw)
             b, c, h, w = out.shape
