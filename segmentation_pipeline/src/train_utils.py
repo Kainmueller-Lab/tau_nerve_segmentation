@@ -4,13 +4,13 @@ import os
 import torch
 from scipy.ndimage import measurements
 import numpy as np
+from PIL import Image
 
 from src import data_utils
 from src import stain_mix #import stain_mix.torch_stain_mixup
 
-
-
 def save_model(step, model, optimizer, loss, filename):
+    print("Save model")
     torch.save({
         'step': step,
         'model_state_dict': model.state_dict(),
@@ -157,44 +157,58 @@ def supervised_train_step(model, raw, gt, fast_aug, color_aug_fn, cutout_fn, cut
     return loss, pred_inst, pred_class.softmax(1), img_caug, gt_inst, gt_ct, cutout_maps
 
 
-def instance_seg_train_step(model, raw, gt, fast_aug, color_aug_fn, inst_loss_fn, writer, device, step,
-                            inst_model='cpv_3c'):
+def instance_seg_train_step(model, raw, gt, fast_aug, color_aug_fn, inst_loss_fn, writer, device, step):
     # move raw to device
-    raw = raw.to(device).float()
+    raw = raw.to(device).float()  # raw = T(1, 1200, 1312, 3)
+
     # normalize raw
     raw = raw + raw.min() * -1
     raw /= raw.max()
+
     # move labels to device
-    gt = gt.to(device).float()
+    gt = gt.to(device).float()  # gt = T(1, 1, 1200, 1312)
+
     # B = batch
     B, _, _, _ = raw.shape
     print("step started")
+
     # augment
     raw_list = []
     gt_inst_list = []
     for b in range(B):
-        img = raw[b].permute(2, 0, 1).unsqueeze(0)  # BHWC -> BCHW
-        gt_ = gt#[b]#.permute(2, 0, 1).unsqueeze(0)  # BHW2 -> B2HW
+        img = raw[b].permute(2, 0, 1).unsqueeze(0)  # BHWC -> BCHW #
+        gt_ = gt#[b].permute(2, 0, 1).unsqueeze(0)  # BHW2 -> B2HW
         img_saug, gt_saug = fast_aug.forward_transform(img, gt_)
 
         # gt_inst = fix_mirror_padding(gt_saug[0,0].cpu().detach().numpy().astype(np.int32)) # slow af
         # gt_inst = torch.tensor(gt_inst, device=device).float().unsqueeze(0)
-        gt_inst = gt_saug#[:, 0]
+        # remove batch
+        gt_inst = gt_saug[:, 0]
         img_caug = color_aug_fn(img_saug)
         raw_list.append(img_caug)
         gt_inst_list.append(gt_inst)
+
+    # concat
     img_caug = torch.cat(raw_list, axis=0)
     gt_inst = torch.cat(gt_inst_list, axis=0)
     print("finished aug")
-    out_fast = model(img_caug)
+
+    # train
+    out_fast = model(img_caug) # T(1, 5, 1200, 1312)
     _, _, H, W = out_fast.shape
     # loss input: gt_inst = ground truth, pred_inst = model output
     #inp = gt_inst.unsqueeze(0)
-    gt_inst = data_utils.center_crop(gt_inst, H, W) #BCHW
+    gt_inst = data_utils.center_crop(gt_inst.unsqueeze(0), H, W) #BCHW
     pred_inst = out_fast #BHW
     # pred_inst = (1, 2, 1200, 1312)
     # gt_inst.squeeze(0).float() = (2, 1200, 1312)
-    instance_loss = inst_loss_fn(pred_inst, gt_inst.squeeze(0).float(), (gt_inst.squeeze(0) > 0).float())
+    # pred_inst = prediction, gt_inst...= instances, labels (all instances = 1)
+
+    # calculate loss
+    instance_loss = inst_loss_fn(pred_inst,
+                                 gt_inst.squeeze(0).float(),
+                                 (gt_inst.squeeze(0) > 0).float()
+                                 )
     writer.add_scalar('instance_loss', instance_loss, step)
     print('loss', instance_loss.item())
     return instance_loss, pred_inst, img_caug, gt_inst
@@ -202,14 +216,13 @@ def instance_seg_train_step(model, raw, gt, fast_aug, color_aug_fn, inst_loss_fn
 
 def instance_seg_validation(model, validation_dataloader, inst_lossfn, device, step, writer, inst_model='cpv_3c'):
     val_loss = []
-    val_inst_loss = []
     for raw, gt in validation_dataloader:
         raw = raw.to(device)
         raw = raw.float() + raw.min() * -1
         raw /= raw.max()
         gt = gt.to(device)
         raw = raw.permute(0, 3, 1, 2)  # BHWC -> BCHW
-        gt = gt.permute(0, 3, 1, 2)  # BHW2 -> B2HW
+        gt = gt#.permute(0, 3, 1, 2)  # BHW2 -> B2HW
         with torch.no_grad():
             out = model(raw)
             b, c, h, w = out.shape
@@ -445,3 +458,63 @@ def make_cpvs(gt_inst, device, background=0):
         cpvs[0, x, y] = (x - x.median()) * -1
         cpvs[1, x, y] = (y - y.median()) * -1
     return cpvs.unsqueeze(0)
+
+
+def rebuild_hp5_blue_channel(file_path, raw_path):
+    raw_folders = [(os.path.join(raw_path, fol), fol) for fol in os.listdir(raw_path)]
+    raw_folders.pop(5)
+    for folder_path, folder_name in raw_folders:
+        files = [os.path.join(folder_path + "/blue_channel" , file) for file in os.listdir(folder_path + "/blue_channel")]
+        for file in files:
+            # raw file
+            if ".tif" in file:
+                # page n
+                file_name = file[len(file) - 10:len(file)-4]
+                if file_name[0] == "/":
+                    file_name = file_name[1:]
+                h5_file = h5py.File(file_path + "/" + folder_name + "_" + file_name + ".hdf5", 'x')
+                # add raws
+                raw = np.array(Image.open(file))
+                h5_file["raw"] = raw
+                # add instances
+                instances = np.array(Image.open(file_path + "_copy/label/" + folder_name + "_" + file_name + ".png"))
+                h5_file["gt_instances"] = instances
+                # add labels
+                labels = instances.copy()
+                labels[labels > 0] = 1
+                h5_file["gt_labels"] = labels
+                h5_file.close()
+
+
+def rebuild_hp5_protein_channels(file_path, raw_path, label_path, channel=None):
+    raw_folders = [(os.path.join(raw_path, fol), fol) for fol in os.listdir(raw_path)]
+    raw_folders.pop(5)
+    for folder_path, folder_name in raw_folders:
+        files = [os.path.join(folder_path + "/blue_channel" , file) for file in os.listdir(folder_path + "/blue_channel")]
+        for file in files:
+            # raw file
+            if ".tif" in file:
+                # page n
+                file_name = file[len(file) - 10:len(file)-4]
+                if file_name[0] == "/":
+                    file_name = file_name[1:]
+                # get raws
+                raw = np.array(Image.open(file))
+                try:
+                    # get instances
+                    instances = np.array(Image.open(label_path + "/" + folder_name + "_" + file_name + "_" +  channel +".png"))
+                except FileNotFoundError:
+                    continue
+                # get labels
+                labels = instances.copy()
+                labels[labels > 0] = 1
+                # create hp5 file
+                create_hp5_file(file_name, file_path, folder_name, instances, labels, raw)
+
+
+def create_hp5_file(file_name, file_path, folder_name, instances, labels, raw):
+    h5_file = h5py.File(file_path + "/" + folder_name + "_" + file_name + ".hdf5", 'x')
+    h5_file["raw"] = raw
+    h5_file["gt_instances"] = instances
+    h5_file["gt_labels"] = labels
+    h5_file.close()

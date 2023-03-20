@@ -247,11 +247,12 @@ def mean(l, ignore_nan=False, empty=0):
 """
 Author: Davy Neven
 Licensed under the CC BY-NC 4.0 license (https://creativecommons.org/licenses/by-nc/4.0/)
-Paper: https://arxiv.org/pdf/1906.11109.pdf
+Paper: https://arxiv.org/pdf/1906.11109.pdf, https://github.com/davyneven/SpatialEmbeddings
 """
 # labels and instances => instances is m
 # (n_sigma=2, to_center=params['to_center'], foreground_weight=10, H=1197, W=1299)
 # input: (pred_inst, gt_inst.squeeze(0).float(), (gt_inst.squeeze(0) > 0).float())
+# batch = class
 
 
 class SpatialEmbLoss(nn.Module):
@@ -276,6 +277,11 @@ class SpatialEmbLoss(nn.Module):
         self.register_buffer("xym", xym)
 
     def forward(self, prediction, instances, labels, w_inst=1., w_var=10., w_seed=1, iou=False, iou_meter=None):
+        # pred = T(1, 5, 1200, 1312), instances = T (1, 1200, 1312), lables = T (1, 1200, 1312)
+        import matplotlib.pyplot as plt
+        fig = plt.figure(figsize=(12, 9))
+        fig.add_subplot(1, 1, 1)
+        plt.imshow(prediction.cpu().detach().numpy()[0][0])
 
         batch_size, height, width = prediction.size(0), prediction.size(2), prediction.size(3)
 
@@ -286,9 +292,10 @@ class SpatialEmbLoss(nn.Module):
 
             # spatial_emb = torch.tanh(prediction[b, 0:2]) + xym_s  # 2 x h x w
             spatial_emb = prediction[b, 0:2] + xym_s  # 2 x h x w
-            sigma = prediction[b, 2:2 + self.n_sigma]  # n_sigma x h x w
+            sigma = prediction[b, 2+self.n_sigma:2+self.n_sigma + 1]  # n_sigma x h x w
+            #  # (1, 1200, 1312)
             seed_map = torch.sigmoid(
-                prediction[b, 2 + self.n_sigma:2 + self.n_sigma + 1])  # 1 x h x w
+                prediction[b, 0:self.n_sigma])  # 1 x h x w T(2, 1200, 1312)
 
             # loss accumulators
             var_loss = 0
@@ -303,7 +310,7 @@ class SpatialEmbLoss(nn.Module):
             instance_ids = instance_ids[instance_ids != 0]
 
             # regress bg to zero
-            bg_mask = label == 0
+            bg_mask = label == 0 # T (1, 1200, 1312)
             if bg_mask.sum() > 0:
                 seed_loss += torch.sum(
                     torch.pow(seed_map[bg_mask] - 0, 2))

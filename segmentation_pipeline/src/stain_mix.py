@@ -139,7 +139,7 @@ def stain_mixup(
     """Stain Mix-Up
     Args:
         image: Image array in RGB (H, W, 3)
-        source_stain_matrix: Stain matrix of source domain (n_stains, 3); n_stains = 2 for H&E
+        source_stain_matrix: Stain matrix of analysis domain (n_stains, 3); n_stains = 2 for H&E
         target_stain_matrix: Stain matrix of target domain (n_stains, 3); n_stains = 2 for H&E
         intensity_range: The lower bound and upper bound of concentration flucutation
         alpha: The weight of soruce_stain_matrix

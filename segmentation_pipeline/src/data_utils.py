@@ -5,9 +5,9 @@ import h5py
 import zarr
 import glob
 from skimage import io
+from skimage.segmentation import find_boundaries
 from torch.utils.data import Dataset
 from torchvision.transforms.transforms import RandomApply, GaussianBlur, ColorJitter
-from skimage.segmentation import find_boundaries
 from scipy.ndimage.morphology import generate_binary_structure
 from scipy.ndimage import binary_erosion
 from tqdm.auto import tqdm
@@ -288,7 +288,7 @@ def shuffle_train_data(X_train, Y_train, random_seed):
     Parameters
     ----------
     X_train : array(float)
-        Array of source images.
+        Array of analysis images.
     Y_train : float
         Array of label images.
     Returns
@@ -312,7 +312,7 @@ def zero_out_train_data(X_train, Y_train, fraction):
     Parameters
     ----------
     X_train : array(float)
-        Array of source images.
+        Array of analysis images.
     Y_train : float
         Array of label images.
     fraction: float (between 0 and 100)
@@ -320,7 +320,7 @@ def zero_out_train_data(X_train, Y_train, fraction):
     Returns
     -------
     X_train : array(float)
-        Fractionated array of source images.
+        Fractionated array of analysis images.
     Y_train : float
         Fractionated array of label images.
     """
